@@ -13,6 +13,7 @@
     <File Name="config.h.in"/>
     <File Name="COPYING"/>
     <File Name="README.md"/>
+    <File Name="cmake_uninstall.cmake.in"/>
   </VirtualDirectory>
   <VirtualDirectory Name="main">
     <VirtualDirectory Name="resources">
@@ -31,6 +32,10 @@
     <File Name="lib/connector.cpp"/>
     <File Name="lib/gpio.cpp"/>
     <File Name="lib/pin.cpp"/>
+    <File Name="lib/board.h"/>
+    <File Name="lib/connector.h"/>
+    <File Name="lib/gpio.h"/>
+    <File Name="lib/pin.h"/>
   </VirtualDirectory>
   <VirtualDirectory Name="cmake">
     <File Name="cmake/FindCppDb.cmake"/>
@@ -54,7 +59,7 @@
       </Compiler>
       <Linker Options="" Required="yes"/>
       <ResourceCompiler Options="" Required="no"/>
-      <General OutputFile="" IntermediateDirectory="./Debug" Command="$(WorkspacePath)/cmake-build-$(WorkspaceConfiguration)/main/$(ProjectName)" CommandArguments="list pin_name" UseSeparateDebugArgs="no" DebugArguments="" WorkingDirectory="$(IntermediateDirectory)" PauseExecWhenProcTerminates="yes" IsGUIProgram="no" IsEnabled="yes"/>
+      <General OutputFile="" IntermediateDirectory="./Debug" Command="$(WorkspacePath)/cmake-build-$(WorkspaceConfiguration)/main/$(ProjectName)" CommandArguments="list pin -Minput" UseSeparateDebugArgs="no" DebugArguments="" WorkingDirectory="$(IntermediateDirectory)" PauseExecWhenProcTerminates="yes" IsGUIProgram="no" IsEnabled="yes"/>
       <BuildSystem Name="CMake">-DCMAKE_BUILD_TYPE=Debug</BuildSystem>
       <Environment EnvVarSetName="&lt;Use Defaults&gt;" DbgSetName="&lt;Use Defaults&gt;">
         <![CDATA[]]>

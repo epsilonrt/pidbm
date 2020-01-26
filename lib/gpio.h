@@ -42,6 +42,9 @@ class Gpio {
     const Connector & connector (int index) const {
       return *_connector.at (index).get();
     }
+    inline cppdb::session & db() const  {
+      return _db;
+    }
 
     friend std::ostream& operator<< (std::ostream& os, const Gpio & c);
 

@@ -22,6 +22,7 @@
 #include <cppdb/frontend.h>
 
 class Pin;
+class Gpio;
 class Connector {
   public:
     enum Alignment {
@@ -54,6 +55,7 @@ class Connector {
         size_t _columns;
     };
 
+    Connector (Gpio * gpio, long long id = -1, int number = -1);
     Connector (cppdb::session & db, long long id = -1, int number = -1);
     Connector (const Connector & src, const std::string & name);
 
@@ -87,6 +89,9 @@ class Connector {
     inline cppdb::session & db() const  {
       return _db;
     }
+    inline Gpio * gpio() const  {
+      return _gpio;
+    }
     inline const Pin & pin (size_t number) const {
       return *_pin.at (number).get();
     }
@@ -110,10 +115,11 @@ class Connector {
 
     cppdb::session & _db;
     long long _id;
-    Family _family;
     long long _number;
+    Gpio * _gpio;
     std::string _name;
     size_t _rows;
+    Family _family;
     std::map<size_t, std::shared_ptr<Pin>> _pin;
     static const std::array<Column, 7> Columns;
 };

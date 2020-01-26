@@ -56,7 +56,7 @@ Gpio::Gpio (cppdb::session & db, long long id) : _db (db), _id (id),
     std::shared_ptr<Connector> c;
 
     res >> num >> i;
-    c = std::make_shared<Connector> (_db, i, num);
+    c = std::make_shared<Connector> (this, i, num);
     _connector.push_back (c);
   }
 }

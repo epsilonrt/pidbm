@@ -27,7 +27,8 @@ class Pidbm::Private {
     Private (Pidbm * q, int argc, char **argv);
     virtual ~Private();
     bool findConnectionInfo ();
-    
+    void checkDatabaseSchemaVersion();
+
     void list();
     void add();
     void mod();
@@ -80,10 +81,14 @@ class Pidbm::Private {
                        const std::string & where,
                        const std::string & condition,
                        bool like = false);
+    void setWhereCondition (const std::string & arg, std::string & where,
+                            std::string & condition, bool & like);
     void setWhereCondition (size_t pos, std::string & where,
                             std::string & condition, bool & like);
     bool readArg (size_t pos, const std::string & from, std::string & id, bool caseInsensitive = false);
     bool readArg (size_t pos, const std::string & from, long long & id, bool caseInsensitive = false);
+    bool readArg (const std::string & arg, const std::string & from, long long & id, bool caseInsensitive = false);
+    bool readArg (const std::string & arg, const std::string & from, std::string & id, bool caseInsensitive = false);
     long long nameExists (const std::string & from, const std::string & name, bool caseInsensitive = false);
     bool idExists (const std::string & from, const std::string & id);
     bool idExists (const std::string & from, const long long & id);
@@ -105,6 +110,7 @@ class Pidbm::Private {
     std::shared_ptr<Popl::Value<std::string>> opMemory;
     std::shared_ptr<Popl::Value<std::string>> opTag;
     std::shared_ptr<Popl::Value<std::string>> opPCB;
+    std::shared_ptr<Popl::Implicit<std::string>> opPinMode;
 
     std::string cinfo;
     mutable cppdb::session db;

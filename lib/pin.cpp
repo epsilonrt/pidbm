@@ -16,6 +16,7 @@
 #include <exception>
 #include "pin.h"
 #include "connector.h"
+#include "gpio.h"
 
 using namespace std;
 
@@ -31,7 +32,6 @@ void Pin::setId (long long i) {
   cppdb::result res =
     _parent.db() << "SELECT pin_type_id "
     "FROM pin "
-    "INNER JOIN pin_type ON pin_type_id=pin_type.id "
     "WHERE pin.id=?"
     << i << cppdb::row;
 
@@ -46,7 +46,7 @@ void Pin::setId (long long i) {
   if (_type.id() == Type::Gpio) {
 
     res =
-      _parent.db() << "SELECT logical_num,mcu_num,system_num "
+      _parent.db() << "SELECT soc_num,sys_num "
       "FROM pin_number "
       "WHERE pin_id=?"
       << _id << cppdb::row;
@@ -55,13 +55,25 @@ void Pin::setId (long long i) {
 
       throw std::invalid_argument ("Pin numbers not found");
     }
-    res >> _logicalNumber >> _mcuNumber >> _systemNumber;
+    res >> _soc_num >> _sys_num;
+
+    if (_parent.gpio()) {
+      res =
+        _parent.db() << "SELECT gpio_num "
+        "FROM gpio_has_pin "
+        "WHERE pin_id=? AND gpio_id=?"
+        << _id << _parent.gpio()->id() << cppdb::row;
+      if (!res.empty()) {
+
+        res >> _gpio_num;
+      }
+    }
   }
 }
 
 // ---------------------------------------------------------------------------
 Pin::Pin (Connector & p, long long i, size_t r, size_t c) : _parent (p),
-  _row (r), _column (c), _logicalNumber (-1), _mcuNumber (-1), _systemNumber (-1) {
+  _row (r), _column (c), _gpio_num (-1), _soc_num (-1), _sys_num (-1) {
 
   setId (i);
 }

@@ -17,6 +17,7 @@
 #include <iomanip>
 #include <algorithm>
 #include <sstream>
+#include "gpio.h"
 #include "connector.h"
 #include "pin.h"
 
@@ -61,9 +62,9 @@ void Connector::Family::setId (long long i) {
 
 // -----------------------------------------------------------------------------
 const std::array<Connector::Column, 7> Connector::Columns = {{
+    {5, "sYs"},
     {5, "sOc"},
     {5, "iNo"},
-    {5, "sYs"},
     {10, "Name"},
     {6, "Type"},
     {6, "Id"},
@@ -114,6 +115,16 @@ std::string Connector::formatColumn (const std::string & s,
 // -----------------------------------------------------------------------------
 Connector::Connector (cppdb::session & d, long long i, int n) : _db (d), _id (i),
   _family (d) {
+
+  _number = n < 0 ? _id : n;
+  if (i >= 0) {
+    setId (i);
+  }
+}
+
+// -----------------------------------------------------------------------------
+Connector::Connector (Gpio * g, long long i, int n) : _db (g->db()), _id (i),
+  _gpio(g), _family (_db) {
 
   _number = n < 0 ? _id : n;
   if (i >= 0) {
@@ -304,17 +315,19 @@ Connector::printRow (std::ostream & os, int number) const {
 
     const Pin & p = pin (number++);
     if (p.type().id() == Pin::Type::Gpio) {
-      sOc = to_string (p.mcuNumber());
-      iNo = to_string (p.logicalNumber());
-      sYs = to_string (p.systemNumber());
+      sOc = to_string (p.socNumber());
+      if (p.inoNumber() >= 0) {
+        iNo = to_string (p.inoNumber());
+      }
+      sYs = to_string (p.sysNumber());
     }
 
     if ( (c % 2) == 0) {
 
       os << '|';
+      os << formatColumn (sYs, Columns[i++].size, Right) << '|';
       os << formatColumn (sOc, Columns[i++].size, Right) << '|';
       os << formatColumn (iNo, Columns[i++].size, Right) << '|';
-      os << formatColumn (sYs, Columns[i++].size, Right) << '|';
       os << formatColumn (p.name(), Columns[i++].size, Right) << '|';
       os << formatColumn (p.type().name(), Columns[i++].size, Right) << '|';
       os << formatColumn (to_string (p.id()), Columns[i++].size, Right) << '|';
@@ -326,9 +339,9 @@ Connector::printRow (std::ostream & os, int number) const {
       os << formatColumn (to_string (p.id()), Columns[--i].size, Left) << '|';
       os << formatColumn (p.type().name(), Columns[--i].size, Left) << '|';
       os << formatColumn (p.name(), Columns[--i].size, Left) << '|';
-      os << formatColumn (sYs, Columns[--i].size, Left) << '|';
       os << formatColumn (iNo, Columns[--i].size, Left) << '|';
       os << formatColumn (sOc, Columns[--i].size, Left) << '|';
+      os << formatColumn (sYs, Columns[--i].size, Left) << '|';
     }
   }
   os << endl;

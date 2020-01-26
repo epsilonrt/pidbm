@@ -59,14 +59,14 @@ class Pin {
     inline const Type & type() const {
       return _type;
     }
-    inline int mcuNumber() const {
-      return _mcuNumber;
+    inline int socNumber() const {
+      return _soc_num;
     }
-    inline int logicalNumber() const {
-      return _logicalNumber;
+    inline int inoNumber() const {
+      return _gpio_num;
     }
-    inline int systemNumber() const {
-      return _systemNumber;
+    inline int sysNumber() const {
+      return _sys_num;
     }
     inline size_t row() const {
       return _row;
@@ -81,8 +81,8 @@ class Pin {
     size_t _row;
     size_t _column;
     Type _type;
-    int _logicalNumber;
-    int _mcuNumber;
-    int _systemNumber;
+    int _gpio_num;
+    int _soc_num;
+    int _sys_num;
 };
 /* ========================================================================== */

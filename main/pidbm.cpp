@@ -24,6 +24,7 @@
 #include "pin.h"
 #include "pidbm_p.h"
 #include "version.h"
+#include "config.h"
 
 #ifndef PIDUINO_INSTALL_ETC_DIR
 #define PIDUINO_INSTALL_ETC_DIR "/etc/piduino.conf"
@@ -109,6 +110,7 @@ Pidbm::open () {
     if (d->findConnectionInfo()) {
 
       d->db.open (d->cinfo);
+      d->checkDatabaseSchemaVersion();
     }
   }
   return isOpen();
@@ -292,8 +294,8 @@ Pidbm::Private::WhatMap = {
   { "pin_name",     { "pin_name.id", "pin_name.name" } },
   {
     "pin_number",   {
-      "pin_number.pin_id", "pin_number.logical_num",
-      "pin_number.mcu_num", "pin_number.system_num"
+      "pin_number.pin_id",
+      "pin_number.soc_num", "pin_number.sys_num"
     }
   },
   {
@@ -306,11 +308,12 @@ Pidbm::Private::WhatMap = {
   },
   {
     "pin_gpio",   {
-      "pin.id",
+      "gpio_has_pin.gpio_id",
       "pin_type.id", "pin_type.name",
       "pin_mode.id", "pin_mode.name",
       "pin_name.id", "pin_name.name",
-      "pin_number.logical_num", "pin_number.mcu_num", "pin_number.system_num"
+      "pin.id",
+      "gpio_has_pin.gpio_num", "pin_number.soc_num", "pin_number.sys_num"
     }
   },
   {
@@ -320,7 +323,7 @@ Pidbm::Private::WhatMap = {
       "pin_type.id", "pin_type.name",
       "pin_mode.id", "pin_mode.name",
       "pin_name.id", "pin_name.name",
-      "pin_number.logical_num", "pin_number.mcu_num", "pin_number.system_num"
+      "pin_number.soc_num", "pin_number.sys_num"
     }
   },
   {
@@ -350,6 +353,7 @@ Pidbm::Private::Private (Pidbm * q) :
   opMemory = op.add<Value<std::string>> ("m", "memory", "Board RAM (MB)");
   opTag = op.add<Value<std::string>> ("t", "tag", "Board tag");
   opPCB = op.add<Value<std::string>> ("p", "pcb", "PCB revision");
+  opPinMode = op.add<Implicit<std::string>> ("M", "mode", "Pin mode", "input");
   op.add<Value<std::string>> ("c", "connection", "Database connection info", "",
                               &cinfo);
 }
@@ -1049,12 +1053,12 @@ void Pidbm::Private::copy() {
 
   if (args.size() > 1) {
     string to (args[1]);
-    
+
     if (to == "connector" && args.size() > 3) {
       long long connector_id;
 
       if (readArg (0, "connector", connector_id, true)) {
-        
+
         Connector src (db, connector_id);
         Connector dst (src, args[3]);
         if (!opQuiet) {
@@ -1217,24 +1221,33 @@ void Pidbm::Private::mod() {
 // list board revision [revision_value]
 // list board tag [tag_value]
 
+// list gpio [name_like/id]
+// list gpio pin [gpio_name_like/gpio_id] [-Mpin_mode]
+
 // list connector [name_like/id]
 // list connector gpio gpio_name_like/gpio_id
 // list connector board board_name_like/board_id
 
-// list pin [pin_name_like/pin_id]
-// list pin net [pin_name_like/pin_id]
-// list pin audio [pin_name_like/pin_id]
-// list pin power [pin_name_like/pin_id]
-// list pin usb [pin_name_like/pin_id]
-// list pin video [pin_name_like/pin_id]
-// list pin net soc [soc_name_like/soc_id]
-// list pin audio soc [soc_name_like/soc_id]
-// list pin power soc [soc_name_like/soc_id]
-// list pin usb soc [soc_name_like/soc_id]
-// list pin video soc [soc_name_like/soc_id]
+// list pin [pin_name_like/pin_id] [-Mpin_mode]
 
-// list pin soc 3
-// list pin soc H5
+// list pin gpio [pin_name_like/pin_id] [-Mpin_mode]
+// list pin net [pin_name_like/pin_id] [-Mpin_mode]
+// list pin audio [pin_name_like/pin_id] [-Mpin_mode]
+// list pin power [pin_name_like/pin_id] [-Mpin_mode]
+// list pin usb [pin_name_like/pin_id] [-Mpin_mode]
+// list pin video [pin_name_like/pin_id] [-Mpin_mode]
+// list pin nc [pin_name_like/pin_id] [-Mpin_mode]
+
+// list pin gpio soc [soc_name_like/soc_id] [-Mpin_mode]
+// list pin net soc [soc_name_like/soc_id] [-Mpin_mode]
+// list pin audio soc [soc_name_like/soc_id] [-Mpin_mode]
+// list pin power soc [soc_name_like/soc_id] [-Mpin_mode]
+// list pin usb soc [soc_name_like/soc_id] [-Mpin_mode]
+// list pin video soc [soc_name_like/soc_id] [-Mpin_mode]
+// list pin nc soc [soc_name_like/soc_id] [-Mpin_mode]
+
+// list pin soc 3 [-Mpin_mode]
+// list pin soc H5 [-Mpin_mode]
 
 // list arch [name_like/id]
 // list soc [name_like/id]
@@ -1242,7 +1255,6 @@ void Pidbm::Private::mod() {
 // list manufacturer [name_like/id]
 // list board_family [name_like/id]
 // list board_model [name_like/id]
-// list gpio [name_like/id]
 // list connector_family [name_like/id]
 // list pin_type [name_like/id]
 // list pin_mode [name_like/id]
@@ -1327,22 +1339,29 @@ void Pidbm::Private::list() {
       setWhereCondition (pos, where, condition, like);
     }
 
-    // list pin [pin_name_like/pin_id]
+    // list pin [pin_name_like/pin_id] [-Mpin_mode]
 
-    // list pin net [pin_name_like/pin_id]
-    // list pin audio [pin_name_like/pin_id]
-    // list pin power [pin_name_like/pin_id]
-    // list pin usb [pin_name_like/pin_id]
-    // list pin video [pin_name_like/pin_id]
-    // list pin net soc [soc_name_like/soc_id]
-    // list pin audio soc [soc_name_like/soc_id]
-    // list pin power soc [soc_name_like/soc_id]
-    // list pin usb soc [soc_name_like/soc_id]
-    // list pin video soc [soc_name_like/soc_id]
+    // list pin gpio [pin_name_like/pin_id] [-Mpin_mode]
+    // list pin net [pin_name_like/pin_id] [-Mpin_mode]
+    // list pin audio [pin_name_like/pin_id] [-Mpin_mode]
+    // list pin power [pin_name_like/pin_id] [-Mpin_mode]
+    // list pin usb [pin_name_like/pin_id] [-Mpin_mode]
+    // list pin video [pin_name_like/pin_id] [-Mpin_mode]
+    // list pin nc [pin_name_like/pin_id] [-Mpin_mode]
 
-    // list pin soc 3
-    // list pin soc H5
+    // list pin gpio soc [soc_name_like/soc_id] [-Mpin_mode]
+    // list pin net soc [soc_name_like/soc_id] [-Mpin_mode]
+    // list pin audio soc [soc_name_like/soc_id] [-Mpin_mode]
+    // list pin power soc [soc_name_like/soc_id] [-Mpin_mode]
+    // list pin usb soc [soc_name_like/soc_id] [-Mpin_mode]
+    // list pin video soc [soc_name_like/soc_id] [-Mpin_mode]
+    // list pin nc soc [soc_name_like/soc_id] [-Mpin_mode]
+
+    // list pin soc 3 [-Mpin_mode]
+    // list pin soc H5 [-Mpin_mode]
     else if (from == "pin") {
+      vector<string> cv;
+
       from.assign ("pin "
                    "INNER JOIN pin_type on pin_type.id = pin.pin_type_id "
                    "INNER JOIN pin_has_name on pin.id = pin_has_name.pin_id "
@@ -1352,13 +1371,12 @@ void Pidbm::Private::list() {
 
       what = WhatMap.at ("pin");
 
-      if (args.size() > 2) {
+      if (args.size() > 2) { // pin +
         string & sub_command = args[2];
 
         long long t = nameExists ("pin_type", sub_command, true);
 
-        if (t >= 0) {
-          vector<string> cv;
+        if (t >= 0) { // pin + gpio,power,usb,audio,video,nc,net
 
           if (t == Pin::Type::Gpio) {
             from.assign ("pin "
@@ -1367,6 +1385,7 @@ void Pidbm::Private::list() {
                          "INNER JOIN pin_name on pin_name.id = pin_has_name.pin_name_id "
                          "INNER JOIN pin_mode on pin_mode.id = pin_has_name.pin_mode_id "
                          "INNER JOIN pin_number on pin.id = pin_number.pin_id "
+                         "INNER JOIN gpio_has_pin on pin.id = gpio_has_pin.pin_id "
                         );
             what = WhatMap.at ("pin_gpio");
           }
@@ -1389,6 +1408,7 @@ void Pidbm::Private::list() {
           }
 
           if (where.empty()) {
+
             setWhereCondition (3, where, condition, like);
             if (where.size() && condition.size()) {
               if (where == "name") {
@@ -1405,10 +1425,8 @@ void Pidbm::Private::list() {
           where += "pin.pin_type_id=?";
           cv.push_back (to_string (t));
           orderby = "pin_name.name";
-          printRecord (what, from, where, cv, orderby);
-          return;
-        }
-        else if (sub_command == "soc" && args.size() > 3) {
+        } // <<< pin + gpio,power,usb,audio,video,nc,net
+        else if (sub_command == "soc" && args.size() > 3) { // pin + soc >>>
           from.assign ("pin "
                        "INNER JOIN pin_type on pin_type.id = pin.pin_type_id "
                        "INNER JOIN pin_has_name on pin.id = pin_has_name.pin_id "
@@ -1421,31 +1439,118 @@ void Pidbm::Private::list() {
           where = "soc.";
           orderby = "pin_name.name";
           setWhereCondition (3, where, condition, like);
-        }
-      }
+          if (where.size() && condition.size()) {
 
-      if (where.empty()) {
+            where += (like ? " LIKE ?" : "=?");
+            cv.push_back (condition);
+          }
+        }  // <<< pin + soc
+      }  // <<< pin +
+
+      if (where.empty()) { // pin only
 
         setWhereCondition (pos, where, condition, like);
-        if (where == "name") {
+        orderby = "pin_name.name";
+        if (where.size() && condition.size()) {
 
-          where = "pin_name.name";
-          orderby = where;
-        }
-        else if (where == "id") {
+          cv.push_back (condition);
+          if (where == "name") {
 
-          where = "pin.id";
+            where = "pin_name.name LIKE ?";
+          }
+          else if (where == "id") {
+
+            where = "pin.id=?";
+          }
         }
       }
-    }
 
+      if (opPinMode->is_set()) {
+        string pin_mode_id;
+
+        readArg (opPinMode->value(), "pin_mode", pin_mode_id, true);
+        if (pin_mode_id.size()) {
+
+          if (where.size()) {
+
+            where += " AND";
+          }
+          where += " pin_mode.id=?";
+          cv.push_back (pin_mode_id);
+        }
+      }
+
+      printRecord (what, from, where, cv, orderby);
+      return; // << --------------------------- return
+    } //-- < pin
+
+    // list gpio [name_like/id]
+    // list gpio pin [gpio_name_like/gpio_id]  [-Mpin_mode]
+    else if (from == "gpio") {
+
+      if (args.size() > 2) { // gpio +
+
+        if (args[2] == "pin") {
+          vector<string> cv;
+
+          from.assign ("gpio_has_pin "
+                       "INNER JOIN gpio on gpio.id = gpio_has_pin.gpio_id "
+                       "INNER JOIN pin on pin.id = gpio_has_pin.pin_id "
+                       "INNER JOIN pin_type on pin_type.id = pin.pin_type_id "
+                       "INNER JOIN pin_has_name on pin.id = pin_has_name.pin_id "
+                       "INNER JOIN pin_name on pin_name.id = pin_has_name.pin_name_id "
+                       "INNER JOIN pin_mode on pin_mode.id = pin_has_name.pin_mode_id "
+                       "INNER JOIN pin_number on pin.id = pin_number.pin_id "
+                      );
+
+          what = WhatMap.at ("pin_gpio");
+
+          setWhereCondition (3, where, condition, like);
+          if (where.size() && condition.size()) {
+            if (where == "name") {
+              where = "gpio.name";
+            }
+            else if (where == "id") {
+              where = "gpio_has_pin.gpio_id";
+            }
+            where += (like ? " LIKE ?" : "=?");
+            cv.push_back (condition);
+            orderby = "gpio_num";
+          }
+          else {
+            orderby = "pin_name.name";
+          }
+
+          if (opPinMode->is_set()) {
+            string pin_mode_id;
+
+            readArg (opPinMode->value(), "pin_mode", pin_mode_id, true);
+            if (pin_mode_id.size()) {
+
+              if (where.size()) {
+
+                where += " AND";
+              }
+              where += " pin_mode.id=?";
+              cv.push_back (pin_mode_id);
+            }
+          }
+
+          printRecord (what, from, where, cv, orderby);
+          return; // << --------------------------- return
+        }
+
+      }
+
+      setWhereCondition (pos, where, condition, like);
+      what = WhatMap.at (from);
+    }
     // list arch [name_like/id]
     // list soc [name_like/id]
     // list soc_family [name_like/id]
     // list manufacturer [name_like/id]
     // list board_family [name_like/id]
     // list board_model [name_like/id]
-    // list gpio [name_like/id]
     // list connector_family [name_like/id]
     // list pin_type [name_like/id]
     // list pin_mode [name_like/id]
@@ -1733,48 +1838,55 @@ std::string Pidbm::Private::columnNameCleanup (const std::string & name) {
 }
 
 // -----------------------------------------------------------------------------
+void Pidbm::Private::setWhereCondition (const std::string & arg, std::string & where,
+                                        std::string & condition, bool & like) {
+  string add_to_where;
+  bool id = true;
+  unsigned long i;
+
+  try {
+    std::size_t p = 0;
+
+    i = std::stol (arg, &p, 0);
+    if (p != arg.size()) {
+      id = false;
+    }
+  }
+  catch (...) {
+
+    id = false;
+  }
+
+  if (id) {
+
+    add_to_where = "id";
+    condition = to_string (i);
+  }
+  else {
+
+    add_to_where = "name";
+    like = true;
+    condition = arg;
+  }
+
+  if (where.find ('.') == (where.size() - 1)) {
+
+    where = where + add_to_where;
+  }
+  else if (where.empty()) {
+
+    where = add_to_where;
+  }
+}
+
+// -----------------------------------------------------------------------------
 void Pidbm::Private::setWhereCondition (size_t pos, std::string & where,
                                         std::string & condition, bool & like) {
   auto args =  op.non_option_args();
-  string add_to_where;
 
   if (args.size() > pos) {
-    bool id = true;
-    unsigned long i;
 
-    try {
-      std::size_t p = 0;
-
-      i = std::stol (args[pos], &p, 0);
-      if (p != args[pos].size()) {
-        id = false;
-      }
-    }
-    catch (...) {
-
-      id = false;
-    }
-
-    if (id) {
-
-      add_to_where = "id";
-      condition = to_string (i);
-    }
-    else {
-
-      add_to_where = "name";
-      like = true;
-      condition = args[pos];
-    }
-
-    if (where.find ('.') == (where.size() - 1)) {
-
-      where = where + add_to_where;
-    }
-    else if (where.empty()) {
-
-      where = add_to_where;
-    }
+    setWhereCondition (args[pos], where, condition, like);
   }
 }
 
@@ -1814,6 +1926,42 @@ bool Pidbm::Private::readArg (size_t pos, const std::string & from,
 }
 
 // -----------------------------------------------------------------------------
+bool Pidbm::Private::readArg (const std::string & arg, const std::string & from,
+                              long long & id, bool caseInsensitive) {
+  cppdb::result res;
+  string where, condition;
+  bool like;
+  bool found = false;
+
+  setWhereCondition (arg, where, condition, like);
+  if (caseInsensitive && where == "name") {
+    condition = toLower (condition);
+    where = "lower(name)";
+  }
+  selectRecordEqual (res, {"id"}, from, where, condition);
+
+  if (res.next()) {
+    res >> id;
+    found = true;
+  }
+  return found;
+}
+
+// -----------------------------------------------------------------------------
+bool Pidbm::Private::readArg (const std::string & arg, const std::string & from,
+                              std::string & id, bool caseInsensitive) {
+  long long i;
+
+  bool found = readArg (arg, from, i, caseInsensitive);
+  if (found) {
+
+    id = to_string (i);
+  }
+  return found;
+}
+
+
+// -----------------------------------------------------------------------------
 long long Pidbm::Private::nameExists (const std::string & from,
                                       const std::string & name, bool caseInsensitive) {
   long long name_id = -1;
@@ -1841,6 +1989,30 @@ bool Pidbm::Private::idExists (const std::string & from, const std::string & id)
 bool Pidbm::Private::idExists (const std::string & from, const long long & id) {
 
   return idExists (from, to_string (id));
+}
+
+// -----------------------------------------------------------------------------
+void Pidbm::Private::checkDatabaseSchemaVersion() {
+  int major, minor;
+  cppdb::result res =
+    db << "SELECT major,minor "
+    "FROM schema_version "
+    "WHERE valid_to IS NULL"
+    <<  cppdb::row;
+
+  if (res.empty()) {
+
+    throw std::logic_error ("Database schema version not found");
+  }
+  res >> major >> minor;
+  if (major != PIDUINO_DBSCHEMA_MAJOR || minor != PIDUINO_DBSCHEMA_MINOR) {
+
+    throw std::logic_error ("Invalid database schema version, should be " +
+                            to_string (PIDUINO_DBSCHEMA_MAJOR) +
+                            "." + to_string (PIDUINO_DBSCHEMA_MINOR) +
+                            ", version " + to_string (major) +
+                            "." + to_string (minor) + " found.");
+  }
 }
 
 // -----------------------------------------------------------------------------
