@@ -47,7 +47,8 @@ Gpio::Gpio (cppdb::session & db, long long id) : _db (db), _id (id),
   res =
     _db << "SELECT num,connector_id "
     "FROM gpio_has_connector "
-    "WHERE gpio_id=?"
+    "WHERE gpio_id=? "
+    "ORDER BY num"
     << _id;
 
   while (res.next()) {

@@ -114,7 +114,7 @@ std::string Connector::formatColumn (const std::string & s,
 
 // -----------------------------------------------------------------------------
 Connector::Connector (cppdb::session & d, long long i, int n) : _db (d), _id (i),
-  _family (d) {
+  _gpio(nullptr), _family (d) {
 
   _number = n < 0 ? _id : n;
   if (i >= 0) {

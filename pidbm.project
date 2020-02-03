@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CodeLite_Project Name="pidbm" Version="10.0.0" InternalType="Console">
+  <VirtualDirectory Name="dev">
+    <VirtualDirectory Name="doc">
+      <File Name="dev/doc/pidb-dev-notes.md"/>
+      <File Name="dev/doc/dbm-use-cases.md"/>
+    </VirtualDirectory>
+  </VirtualDirectory>
   <Plugins>
     <Plugin Name="qmake">
       <![CDATA[00020001N0005Debug0000000000000001N0007Release000000000000]]>
@@ -36,6 +42,8 @@
     <File Name="lib/connector.h"/>
     <File Name="lib/gpio.h"/>
     <File Name="lib/pin.h"/>
+    <File Name="lib/soc.h"/>
+    <File Name="lib/soc.cpp"/>
   </VirtualDirectory>
   <VirtualDirectory Name="cmake">
     <File Name="cmake/FindCppDb.cmake"/>
@@ -59,7 +67,7 @@
       </Compiler>
       <Linker Options="" Required="yes"/>
       <ResourceCompiler Options="" Required="no"/>
-      <General OutputFile="" IntermediateDirectory="./Debug" Command="$(WorkspacePath)/cmake-build-$(WorkspaceConfiguration)/main/$(ProjectName)" CommandArguments="list pin -Minput" UseSeparateDebugArgs="no" DebugArguments="" WorkingDirectory="$(IntermediateDirectory)" PauseExecWhenProcTerminates="yes" IsGUIProgram="no" IsEnabled="yes"/>
+      <General OutputFile="" IntermediateDirectory="./Debug" Command="$(WorkspacePath)/cmake-build-$(WorkspaceConfiguration)/main/$(ProjectName)" CommandArguments="add pin2con 20" UseSeparateDebugArgs="no" DebugArguments="" WorkingDirectory="$(IntermediateDirectory)" PauseExecWhenProcTerminates="yes" IsGUIProgram="no" IsEnabled="yes"/>
       <BuildSystem Name="CMake">-DCMAKE_BUILD_TYPE=Debug</BuildSystem>
       <Environment EnvVarSetName="&lt;Use Defaults&gt;" DbgSetName="&lt;Use Defaults&gt;">
         <![CDATA[]]>

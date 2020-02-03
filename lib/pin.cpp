@@ -46,7 +46,7 @@ void Pin::setId (long long i) {
   if (_type.id() == Type::Gpio) {
 
     res =
-      _parent.db() << "SELECT soc_num,sys_num "
+      _parent.db() << "SELECT soc_pin_num,sys_pin_num "
       "FROM pin_number "
       "WHERE pin_id=?"
       << _id << cppdb::row;
@@ -59,7 +59,7 @@ void Pin::setId (long long i) {
 
     if (_parent.gpio()) {
       res =
-        _parent.db() << "SELECT gpio_num "
+        _parent.db() << "SELECT ino_pin_num "
         "FROM gpio_has_pin "
         "WHERE pin_id=? AND gpio_id=?"
         << _id << _parent.gpio()->id() << cppdb::row;

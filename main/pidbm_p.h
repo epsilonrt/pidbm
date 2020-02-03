@@ -20,6 +20,13 @@
 #include <iostream>
 #include <vector>
 
+namespace pidbm {
+  std::string progName();
+  bool fileExists (const std::string & path);
+  std::string toUpper (const std::string & s);
+  std::string toLower (const std::string & s);
+}
+
 class Pidbm::Private {
 
   public:
@@ -89,6 +96,7 @@ class Pidbm::Private {
     bool readArg (size_t pos, const std::string & from, long long & id, bool caseInsensitive = false);
     bool readArg (const std::string & arg, const std::string & from, long long & id, bool caseInsensitive = false);
     bool readArg (const std::string & arg, const std::string & from, std::string & id, bool caseInsensitive = false);
+    template <class T> bool searchPinId (const std::string & nameOrId, T & id);
     long long nameExists (const std::string & from, const std::string & name, bool caseInsensitive = false);
     bool idExists (const std::string & from, const std::string & id);
     bool idExists (const std::string & from, const long long & id);
@@ -178,7 +186,7 @@ long long Pidbm::Private::insertRecord (const std::vector<std::string> & what,
       }
     }
     req << ')';
-    std::cout << req.str() << std::endl; // debug
+    //std::cout << req.str() << std::endl; // debug
 
     st = db << req.str();
     for (auto v : values) {
@@ -279,6 +287,39 @@ long long Pidbm::Private::selectRecord (cppdb::result & res,
     }
   }
   return n;
+}
+
+// -----------------------------------------------------------------------------
+template <class T>
+bool Pidbm::Private::searchPinId (const std::string & nameOrId, T & id) {
+  std::string where, condition;
+  bool like;
+
+  setWhereCondition (nameOrId, where, condition, like);
+  if (where.size() && condition.size()) {
+    cppdb::result res;
+    std::vector<std::string> cv;
+    std::string from  = "pin_has_name "
+                        "INNER JOIN pin_name ON pin_has_name.pin_name_id = pin_name.id";
+    if (where == "name") {
+      where = "lower(pin_name.name)=?";
+    }
+    else {
+
+      where = "pin_has_name.pin_id=?";
+    }
+    where += " AND pin_mode_id=?";
+    condition = pidbm::toLower (condition);
+    cv.push_back (condition);
+    cv.push_back ("0"); // input
+    if (selectRecord (res, {"pin_id"}, from, where, cv) == 1) {
+      if (res.next()) {
+        res >> id;
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /* ========================================================================== */

@@ -22,6 +22,7 @@
 #include "gpio.h"
 #include "connector.h"
 #include "pin.h"
+#include "soc.h"
 #include "pidbm_p.h"
 #include "version.h"
 #include "config.h"
@@ -254,9 +255,9 @@ Pidbm::warranty () {
 // -----------------------------------------------------------------------------
 // static constants
 const std::string Pidbm::Private::Authors = "Pascal JEAN";
-const std::string Pidbm::Private::Website = "https://github.com/epsilonrt/piduino";
+const std::string Pidbm::Private::Website = "https://github.com/epsilonrt/pidbm";
 const std::string Pidbm::Private::Description =
-  "usage : pidbm [ options ] {list | add | mod | rm | {-v | --version} "
+  "usage : pidbm [ options ] {list | show | add | cp | mod | rm | {-v | --version} "
   "{-w | --warranty} | {-h | --help}} [<args>] [ options ]\n"
 // 01234567890123456789012345678901234567890123456789012345678901234567890123456789
   "Piduino database manager\n"
@@ -295,7 +296,7 @@ Pidbm::Private::WhatMap = {
   {
     "pin_number",   {
       "pin_number.pin_id",
-      "pin_number.soc_num", "pin_number.sys_num"
+      "pin_number.soc_pin_num", "pin_number.sys_pin_num"
     }
   },
   {
@@ -313,7 +314,7 @@ Pidbm::Private::WhatMap = {
       "pin_mode.id", "pin_mode.name",
       "pin_name.id", "pin_name.name",
       "pin.id",
-      "gpio_has_pin.gpio_num", "pin_number.soc_num", "pin_number.sys_num"
+      "gpio_has_pin.ino_pin_num", "pin_number.soc_pin_num", "pin_number.sys_pin_num"
     }
   },
   {
@@ -323,7 +324,7 @@ Pidbm::Private::WhatMap = {
       "pin_type.id", "pin_type.name",
       "pin_mode.id", "pin_mode.name",
       "pin_name.id", "pin_name.name",
-      "pin_number.soc_num", "pin_number.sys_num"
+      "pin_number.soc_pin_num", "pin_number.sys_pin_num"
     }
   },
   {
@@ -370,18 +371,6 @@ Pidbm::Private::~Private() {
 // add manufacturer name
 // add manufacturer "Sony Japan"
 
-// add pin type input_name [ino_num soc_num sys_num]
-// add pin video "CVBS"
-
-// add name2pin pin_id mode name [mode name]
-// add name2pin 98 alt0 UART1TX alt5 SPI0MISO
-
-// add pin2soc
-// 0      soc   (id/name)
-// 1      pin_id
-// add pin2soc 3 98
-// add pin2soc 3 # <<< interactif
-
 // add connector
 // 0      name
 // 1      connector_family  (id/name)
@@ -389,20 +378,39 @@ Pidbm::Private::~Private() {
 // add connector "j2-j1" h2x  16
 // add connector inner h1x  7
 
-// add pin2con
-// 0          connector   (id/name)
-// 1          row
-// 2          [col]
-// 2/3        pin_id
-// add pin2con 17  1 1 2
-// add pin2con 17 # <<< interactif
-
 // add gpio name        board_family_id
 // add gpio nanopiduo2  1
 
 //  add con2gpio gpio         #connector    connector_id
 //  add con2gpio 10           1             17
 //  add con2gpio orangepione  1             test
+
+// add pin type input_mode_name [soc_pin_num sys_pin_num]
+// add pin video "CVBS"
+
+// add name2pin pin_id mode name [mode name]
+// add name2pin 98 alt0 UART1TX alt5 SPI0MISO
+
+// add pin2soc
+// 0      soc   (id/name)
+// 1      pin_id/pin_name # name is for pin_mode = 'input'
+// add pin2soc 3 98
+// add pin2soc 3 # <<< interactif
+
+// add pin2con
+// 0          connector   (id/name)
+// 1          row
+// 2          [col]
+// 2/3        pin_id/pin_name # name is for pin_mode = 'input'
+// add pin2con 17  1 1 2
+// add pin2con 17 # <<< interactif
+
+// add pin2gpio
+// 0      gpio   (id/name)
+// 1      ino_pin_num # must be a unsigned integer
+// 2      pin_id/pin_name # name is for pin_mode = 'input'
+// add pin2gpio 3 1 GPIOA0
+// add pin2gpio 3 1 # <<< interactif, ino_pin_num for the first pin number to request
 
 // add board_model name             board_family  soc
 // add board_model "RaspberryPi 4B" 0             5
@@ -439,7 +447,7 @@ void Pidbm::Private::add() {
     }
 
     // -------------------------------------------------------------------------
-    // add pin type input_name [ino_num soc_num sys_num]
+    // add pin type input_name [soc_pin_num sys_pin_num]
     // add pin video "CVBS"
     else if (to == "pin" && values.size() >= 2) {
       long long t = nameExists ("pin_type", values[0], true);
@@ -448,9 +456,9 @@ void Pidbm::Private::add() {
         long long n;
         string pin_name_id, pin_id, pin_type_id;
 
-        if (t == Pin::Type::Gpio && values.size() < 5) {
+        if (t == Pin::Type::Gpio && values.size() < 4) {
 
-          throw std::invalid_argument ("You must provide 3 numbers for a GPIO pin (ino, soc, system).");
+          throw std::invalid_argument ("You must provide 2 numbers for a GPIO pin (soc, system).");
         }
         pin_type_id = to_string (t);
 
@@ -541,61 +549,161 @@ void Pidbm::Private::add() {
     // add name2pin pin_id mode name [mode name]
     // add name2pin 98 alt0 UART1TX alt5 SPI0MISO
     else if (to == "name2pin" && values.size() >= 3) {
-      string & pin_id = values[0];
+      string pin_id;
 
-      selectRecordEqual (records, {"pin_type_id"}, "pin", "id", pin_id);
-      if (records.next()) {
-        long long pin_type_id;
+      if (searchPinId (values[0], pin_id)) {
 
-        records >> pin_type_id;
-        if (pin_type_id == Pin::Type::Gpio) {
+        selectRecordEqual (records, {"pin_type_id"}, "pin", "id", pin_id);
+        if (records.next()) {
+          long long pin_type_id;
 
-          for (size_t n = 1; n < (values.size() - 1); n += 2) {
-            long long pin_mode_id;
+          records >> pin_type_id;
+          if (pin_type_id == Pin::Type::Gpio) {
 
-            pin_mode_id = nameExists ("pin_mode", values[n], true);
-            if (pin_mode_id >= 0) {
-              long long pin_name_id;
+            for (size_t n = 1; n < (values.size() - 1); n += 2) {
+              long long pin_mode_id;
 
-              pin_name_id = nameExists ("pin_name", values[n + 1]);
-              if (pin_name_id < 0) {
-                v.push_back (values[n + 1]);
-                pin_name_id = insertRecord ( {"name"}, "pin_name", v);
+              pin_mode_id = nameExists ("pin_mode", values[n], true);
+              if (pin_mode_id >= 0) {
+                long long pin_name_id;
+
                 v.clear();
+                pin_name_id = nameExists ("pin_name", values[n + 1]);
+                if (pin_name_id < 0) {
+
+                  v.push_back (values[n + 1]);
+                  pin_name_id = insertRecord ( {"name"}, "pin_name", v);
+                  v.clear();
+                }
+                v.push_back (pin_id);
+                v.push_back (to_string (pin_name_id));
+                v.push_back (to_string (pin_mode_id));
+
+                insertRecord ( { "pin_id", "pin_name_id", "pin_mode_id" },
+                               "pin_has_name", v, true);
               }
-              v.push_back (pin_id);
-              v.push_back (to_string (pin_name_id));
-              v.push_back (to_string (pin_mode_id));
+              else {
 
-              insertRecord ( { "pin_id", "pin_name_id", "pin_mode_id" },
-                             "pin_has_name", v, true);
-            }
-            else {
-
-              throw std::invalid_argument (values[n + 1] + " invalid pin mode "
-                                           "name, use `list pin_mode` to see them.");
+                throw std::invalid_argument (values[n + 1] + " invalid pin mode "
+                                             "name, use `list pin_mode` to see them.");
+              }
             }
           }
+          else {
+
+            throw std::invalid_argument (values[0] + " is not a GPIO type pin.");
+          }
+        }
+
+      }
+      else {
+
+        throw std::invalid_argument ("pin " + values[0] + " not found !");
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // add pin2gpio
+    // 0      gpio   (id/name)
+    // 1      ino_pin_num # must be a unsigned integer
+    // 2      pin_id/pin_name # name is for pin_mode = 'input'
+    // add pin2gpio 3 1 GPIOA0
+    // add pin2gpio 3 1 # <<< interactif, ino_pin_num for the first pin number to request
+    else if (to == "pin2gpio" && values.size() >= 2) {
+      string gpio_id;
+
+      if (readArg (0, "gpio", gpio_id, true)) {
+        vector<string> pv, pn;
+        int num;
+        std::size_t p = 0;
+
+        num = stoi (values[1], &p); // thrown exception if not int
+        if (p != values[1].size()) {
+
+          throw std::invalid_argument (values[1] + " invalid pin number.");
+        }
+
+        if (values.size() < 3) {
+          string str;
+          bool quit;
+          string  gpio_name;
+          int n = num;
+
+          selectRecordEqual (records, {"name"}, "gpio", "id", gpio_id);
+          if (records.next()) {
+
+            records >> gpio_name;
+          }
+
+          cout << "-- Adds pins to the " << gpio_name << " Gpio (id:" << gpio_id
+               << ") --" << endl
+               << "Enter the pin one by one then ENTER, press [q/Q] to exit." << endl;
+
+          do {
+
+            cout << "Pin #" << n << ", pin_id or pin_name ? ";
+            cin >> str;
+            quit = (str == "Q" || str == "q");
+
+            if (!quit) {
+              string pin_id;
+
+              if (searchPinId (str, pin_id)) {
+
+                selectRecordEqual (records, {"pin_type_id"}, "pin", "id", pin_id);
+                if (records.next()) {
+                  long long pin_type_id;
+
+                  records >> pin_type_id;
+                  if (pin_type_id != Pin::Type::Gpio) {
+
+                    throw std::invalid_argument (str + " is not a GPIO type pin.");
+                  }
+                }
+
+                pv.push_back (pin_id);
+                pn.push_back (to_string (n++));
+              }
+              else {
+
+                cout << "pin " << str << " not found !" << endl;
+              }
+            }
+          }
+          while (!quit);
         }
         else {
+          string pin_id;
 
-          throw std::invalid_argument ("pin " + pin_id +
-                                       " has an invalid type, you cannot "
-                                       "add a 'mode/name' pair to a pin that is "
-                                       "not of Gpio type !");
+          if (searchPinId (values[2], pin_id)) {
+
+            pv.push_back (pin_id);
+            pn.push_back (to_string (num));
+          }
+          else {
+
+            cout << "pin " << values[2] << " not found !" << endl;
+          }
+        }
+
+        for (size_t i = 0; i < pv.size(); i++) {
+          string pin_id = pv[i];
+          string ino_pin_num = pn[i];
+
+          v = {  gpio_id, pin_id, ino_pin_num};
+          insertRecord ( { "gpio_id", "pin_id", "ino_pin_num"}, "gpio_has_pin", v, true);
         }
       }
       else {
 
-        throw std::invalid_argument (pin_id + " invalid pin id, you need to "
-                                     "add the pin first.");
+        throw std::invalid_argument ("invalid gpio " + values[0] + ", use `list gpio` to see them.");
       }
     }
 
     // -------------------------------------------------------------------------
     // add pin2soc
     // 0      soc   (id/name)
-    // 1      pin_id
+    // 1      pin_id/pin_name # name is for pin_mode = 'input'
     // add pin2soc 3 98
     // add pin2soc 3 # <<< interactif
     else if (to == "pin2soc" && values.size() >= 1) {
@@ -617,31 +725,40 @@ void Pidbm::Private::add() {
 
           cout << "-- Adds pins to the " << soc_name << " SoC (id:" << soc_id
                << ") --" << endl
-               << "Enter the pin ID one by one then ENTER, press [q/Q] to exit." << endl;
+               << "Enter the pin one by one then ENTER, press [q/Q] to exit." << endl;
 
           do {
 
             cout << "? ";
             cin >> str;
-            quit = (str[0] == 'Q' || str[0] == 'q');
+            quit = (str == "Q" || str == "q");
 
             if (!quit) {
+              string pin_id;
 
-              try {
-                (void) stol (str, nullptr);
-                pv.push_back (str);
+              if (searchPinId (str, pin_id)) {
+
+                pv.push_back (pin_id);
               }
-              catch (...) {
+              else {
 
-                cout << "ID must be an integer !" << endl;
+                cout << "pin " << str << " not found !" << endl;
               }
             }
           }
           while (!quit);
         }
         else {
+          string pin_id;
 
-          pv.push_back (values[1]);
+          if (searchPinId (values[1], pin_id)) {
+
+            pv.push_back (pin_id);
+          }
+          else {
+
+            cout << "pin " << values[1] << " not found !" << endl;
+          }
         }
 
         for (auto pin_id : pv) {
@@ -657,35 +774,11 @@ void Pidbm::Private::add() {
     }
 
     // -------------------------------------------------------------------------
-    // add connector
-    // 0      name
-    // 1      connector_family  (id/name)
-    // 2      rows
-    // add connector "j2-j1" h2x  16
-    // add connector inner h1x  7
-    else if (to == "connector" && values.size() >= 3) {
-      string connector_family_id;
-
-      if (readArg (1, "connector_family", connector_family_id, true)) {
-
-        v.push_back (connector_family_id);
-        v.push_back (values[0]);
-        v.push_back (values[2]);
-        insertRecord ( {"connector_family_id", "name", "rows"}, to, v);
-      }
-      else {
-
-        throw std::invalid_argument ("invalid connector_family " + values[1] +
-                                     ", use `list connector_family` to see them.");
-      }
-    }
-
-    // -------------------------------------------------------------------------
     // add pin2con
     // 0          connector   (id/name)
     // 1          row
     // 2          [col]
-    // 2/3        pin_id
+    // 2/3        pin_id/pin_name # name is for pin_mode = 'input'
     // add pin2con 17  1 1 2
     // add pin2con 17 # <<< interactif
     else if (to == "pin2con" && values.size() >= 1) {
@@ -731,31 +824,39 @@ void Pidbm::Private::add() {
             cout << "| ? ";
 
             getline (cin, line);
-            quit = (line[0] == 'Q' || line[0] == 'q');
+            quit = (line == "Q" || line == "q");
 
             if (!quit) {
               size_t comma, pos = 0;
+              vector<long long> pv;
 
-              try {
-                long long i;
-                vector<long long> pv;
+              for (size_t col = 1; col <= c.columns(); col++) {
+                string word;
+                long long pin_id;
 
-                for (size_t col = 1; col <= c.columns(); col++) {
+                comma = line.find (',', pos);
 
-                  i = stol (line.substr (pos), &comma);
-                  pv.push_back (i);
-                  pos += comma + 1;
+                word = line.substr (pos, comma);
+                if (searchPinId (word, pin_id)) {
+
+                  pv.push_back (pin_id);
+                }
+                else {
+
+                  cout << "pin " << word << " not found !" << endl;
+                  break;
                 }
 
-                for (size_t col = 1; col <= c.columns(); col++) {
+                pos += comma + 1;
+              }
+
+              if (pv.size() == c.columns()) {
+
+                for (size_t col = 1; col <= c.columns() ; col++) {
 
                   c.updatePin (row, col, pv[col - 1]);
                 }
                 row++;
-              }
-              catch (...) {
-
-                cout << "Enter the pin identifiers of the pin numbers (opposite) separated by space or comma then ENTER, press [q/Q] to exit." << endl;
               }
             }
           }
@@ -769,7 +870,31 @@ void Pidbm::Private::add() {
     }
 
     // -------------------------------------------------------------------------
-    // add gpio name        board_family_id
+    // add connector
+    // 0      name
+    // 1      connector_family  (id/name)
+    // 2      rows
+    // add connector "j2-j1" h2x  16
+    // add connector inner h1x  7
+    else if (to == "connector" && values.size() >= 3) {
+      string connector_family_id;
+
+      if (readArg (1, "connector_family", connector_family_id, true)) {
+
+        v.push_back (connector_family_id);
+        v.push_back (values[0]);
+        v.push_back (values[2]);
+        insertRecord ( {"connector_family_id", "name", "rows"}, to, v);
+      }
+      else {
+
+        throw std::invalid_argument ("invalid connector_family " + values[1] +
+                                     ", use `list connector_family` to see them.");
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // add gpio name        board_family
     // add gpio nanopiduo2  1
     else if (to == "gpio" && values.size() >= 2) {
       string board_family_id;
@@ -849,13 +974,14 @@ void Pidbm::Private::add() {
     }
 
     // -------------------------------------------------------------------------
-    // add board  name
-    // 0          board_model   (id/name)
-    // 1          gpio          (id/name)
-    // 2          manufacturer  (id/name)
-    // 3          default_i2c_id
-    // 4          default_spi_id
-    // 5          default_uart_id
+    // add board
+    // 0          name
+    // 1          board_model   (id/name)
+    // 2          gpio          (id/name)
+    // 3          manufacturer  (id/name)
+    // 4          default_i2c_id
+    // 5          default_spi_id
+    // 6          default_uart_id
     //            [-rREVISION] [-mRAM] [-pPCB_REV]
     //
     // add board "RaspberryPi 4B (0xA03111)" 23 3 1 1 0 0 -r0xa03111 -m1024 -p"1.1"
@@ -865,13 +991,16 @@ void Pidbm::Private::add() {
            (opRevision->is_set() != opTag->is_set())) {
         string board_model_id;
 
-        if (readArg (0, "board_model", board_model_id, true)) {
+
+        if (readArg (1, "board_model", board_model_id, true)) {
           string gpio_id;
 
-          if (readArg (1, "gpio", gpio_id, true)) {
+          values[1] = board_model_id;
+          if (readArg (2, "gpio", gpio_id, true)) {
             string manufacturer_id;
 
-            if (readArg (2, "manufacturer", manufacturer_id, true)) {
+            values[2] = gpio_id;
+            if (readArg (3, "manufacturer", manufacturer_id, true)) {
               long long id;
               unsigned long rev;
               what = { "name",
@@ -883,6 +1012,8 @@ void Pidbm::Private::add() {
                        "default_uart_id"
                      };
 
+              values[3] = manufacturer_id;
+              
               if (opMemory->is_set()) {
 
                 what.push_back ("ram");
@@ -897,7 +1028,7 @@ void Pidbm::Private::add() {
 
               if (opRevision->is_set()) {
 
-                rev = std::stol (opRevision->value(), nullptr, 0);
+                rev = std::stol (opRevision->value(), nullptr, 0); // check if rev valid
               }
 
               id = insertRecord (what, to, values);
@@ -1047,6 +1178,7 @@ void Pidbm::Private::remove() {
 // Use cases
 
 // cp connector [name_like/id] new_name
+// cp soc [name_like/id] new_name
 void Pidbm::Private::copy() {
 
   auto args =  op.non_option_args();
@@ -1054,7 +1186,8 @@ void Pidbm::Private::copy() {
   if (args.size() > 1) {
     string to (args[1]);
 
-    if (to == "connector" && args.size() > 3) {
+    // cp connector [name_like/id] new_name
+    if (to == "connector" && args.size() >= 4) {
       long long connector_id;
 
       if (readArg (0, "connector", connector_id, true)) {
@@ -1065,6 +1198,22 @@ void Pidbm::Private::copy() {
 
           cout << src.name() << " connector (id:" << src.id() << ") copied to "
                << dst.name() << " connector (id:" << dst.id() << ")." << endl;
+        }
+      }
+    }
+
+    // cp soc [name_like/id] new_name
+    else if (to == "soc" && args.size() >= 4) {
+      long long soc_id;
+
+      if (readArg (0, "soc", soc_id, true)) {
+
+        Soc src (db, soc_id);
+        Soc dst (src, args[3]);
+        if (!opQuiet) {
+
+          cout << src.name() << " soc (id:" << src.id() << ") copied to "
+               << dst.name() << " soc (id:" << dst.id() << ")." << endl;
         }
       }
     }
@@ -1515,12 +1664,9 @@ void Pidbm::Private::list() {
             }
             where += (like ? " LIKE ?" : "=?");
             cv.push_back (condition);
-            orderby = "gpio_num";
-          }
-          else {
-            orderby = "pin_name.name";
           }
 
+          orderby = "ino_pin_num";
           if (opPinMode->is_set()) {
             string pin_mode_id;
 
@@ -1868,14 +2014,15 @@ void Pidbm::Private::setWhereCondition (const std::string & arg, std::string & w
     like = true;
     condition = arg;
   }
-
-  if (where.find ('.') == (where.size() - 1)) {
-
-    where = where + add_to_where;
-  }
-  else if (where.empty()) {
+  if (where.empty()) {
 
     where = add_to_where;
+  }
+  else {
+    if (where.rfind ('.') == (where.size() - 1)) {
+
+      where = where + add_to_where;
+    }
   }
 }
 
@@ -1959,7 +2106,6 @@ bool Pidbm::Private::readArg (const std::string & arg, const std::string & from,
   }
   return found;
 }
-
 
 // -----------------------------------------------------------------------------
 long long Pidbm::Private::nameExists (const std::string & from,
